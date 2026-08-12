@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance Card AI Extractor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- PDF.js library for browser PDF page rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <h1>Attendance AI Extractor</h1>
+          <p class="subtitle">Vision LLM OCR Dashboard for Handwritten Yellow Cards</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="api-key-status" id="apiKeyStatus">
+          <span class="status-dot warning"></span>
+          <span class="status-text">Checking API Key...</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btnSettings">⚙️ API Settings</button>
+      </div>
+    </header>
+
+    <!-- API Key Settings Modal -->
+    <div class="modal-backdrop hidden" id="settingsModal">
+      <div class="modal-card">
+        <h3>Gemini API Key Configuration</h3>
+        <p class="modal-desc">Enter your Google AI Studio API key. It will be stored locally in your browser for session requests.</p>
+        <div class="input-group">
+          <label for="apiKeyInput">API Key</label>
+          <input type="password" id="apiKeyInput" placeholder="AIzaSy..." autocomplete="off">
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" id="btnCancelSettings">Cancel</button>
+          <button class="btn btn-primary" id="btnSaveSettings">Save Key</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <main class="main-workspace">
+      <!-- File Upload & Dropzone Area -->
+      <section class="upload-section" id="uploadSection">
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">📁</div>
+          <h2>Drag & Drop Attendance Card Images or PDFs</h2>
+          <p>Supports yellow card scans, photos, JPEG, PNG, or PDF files</p>
+          <label class="btn btn-primary btn-lg file-label">
+            <span>Browse Files</span>
+            <input type="file" id="fileInput" multiple accept="image/*,.pdf" hidden>
+          </label>
+        </div>
+
+        <div class="file-preview-bar hidden" id="filePreviewBar">
+          <div class="preview-header">
+            <div class="preview-status-group">
+              <span class="preview-title" id="selectedFilesCount">0 files selected</span>
+              <span class="processing-badge hidden" id="processingBadge">
+                <span class="btn-spinner sm"></span>
+                <span>Rendering card pages...</span>
+              </span>
+            </div>
+            <button class="btn btn-text" id="btnClearFiles">Clear All</button>
+          </div>
+          <div class="thumbnails-grid" id="thumbnailsGrid"></div>
+          <div class="action-row">
+            <button class="btn btn-accent btn-xl w-full" id="btnExtract">
+              <span class="btn-spinner hidden" id="extractSpinner"></span>
+              <span class="btn-text-content">✨ Extract Attendance Data with Gemini AI</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Split Screen Review Workspace -->
+      <section class="review-workspace hidden" id="reviewWorkspace">
+        <div class="workspace-header">
+          <div class="employee-tabs" id="employeeTabs"></div>
+          <div class="workspace-actions">
+            <button class="btn btn-secondary" id="btnNewUpload">➕ Upload More Cards</button>
+            <button class="btn btn-success" id="btnExportCsv">📥 Download CSV</button>
+          </div>
+        </div>
+
+        <div class="split-view">
+          <!-- Left Panel: Card Image Viewer -->
+          <div class="panel image-panel">
+            <div class="panel-header">
+              <div class="panel-header-title">
+                <span>📷 Card Scan</span>
+                <div class="image-nav-group">
+                  <button class="btn-icon nav-arrow" id="btnPrevImage" title="Previous Card (◀)" disabled>◀</button>
+                  <select id="imageSelect" class="image-select-dropdown"></select>
+                  <button class="btn-icon nav-arrow" id="btnNextImage" title="Next Card (▶)" disabled>▶</button>
+                </div>
+              </div>
+              <div class="zoom-controls">
+                <button class="btn-icon" id="btnZoomOut" title="Zoom Out">➖</button>
+                <span class="zoom-level" id="zoomLevel">100%</span>
+                <button class="btn-icon" id="btnZoomIn" title="Zoom In">➕</button>
+                <button class="btn-icon" id="btnResetZoom" title="Reset Zoom">🔄</button>
+              </div>
+            </div>
+            <div class="image-viewport" id="imageViewport">
+              <img id="cardPreviewImage" src="" alt="Attendance Card Scan">
+              <div id="imagePlaceholder" class="placeholder-text hidden">No preview available for this selection</div>
+            </div>
+          </div>
+
+          <!-- Right Panel: Extracted Editable Table -->
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <span>📋 Extracted Data Records</span>
+              <div class="meta-inputs">
+                <div class="meta-field">
+                  <label>Emp ID / Name:</label>
+                  <input type="text" id="metaEmpId" value="">
+                </div>
+                <div class="meta-field">
+                  <label>Month:</label>
+                  <input type="text" id="metaMonth" value="July">
+                </div>
+                <div class="meta-field">
+                  <label>Year:</label>
+                  <input type="text" id="metaYear" value="2026">
+                </div>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table class="data-table" id="recordsTable">
+                <thead>
+                  <tr>
+                    <th width="80">Date</th>
+                    <th width="90">Shift</th>
+                    <th width="120">Time In</th>
+                    <th width="120">Time Out</th>
+                    <th width="90">OT Hrs</th>
+                    <th width="60">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+              </table>
+            </div>
+
+            <div class="panel-footer">
+              <button class="btn btn-secondary btn-sm" id="btnAddRow">➕ Add Row</button>
+              <span class="row-count-badge" id="rowCountBadge">0 records</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
