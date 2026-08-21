@@ -3,7 +3,7 @@ import multer from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 dotenv.config();
 
@@ -18,7 +18,10 @@ const PRIMARY_VISION_MODEL = 'gemini-3.5-flash';
 const ESCALATION_VISION_MODELS = [
   'gemini-3.6-flash',
   'gemini-2.5-pro',
-  'gemini-3.1-pro-preview'
+  // gemini-3.1-pro is GA (Feb 2026). The previous pin was its -preview build,
+  // which is the sort of identifier that stops resolving without notice — the
+  // whole point of pinning here is a deterministic list, and a preview is not.
+  'gemini-3.1-pro'
 ];
 
 const upload = multer({
@@ -40,31 +43,31 @@ app.get('/api/config', (req, res) => {
 
 // JSON Schema definition for Gemini response
 const attendanceSchema = {
-  type: SchemaType.OBJECT,
+  type: Type.OBJECT,
   properties: {
     cards: {
-      type: SchemaType.ARRAY,
+      type: Type.ARRAY,
       description: "List of ALL distinct employee attendance cards found in the uploaded file(s)",
       items: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          employee_id: { type: SchemaType.STRING, description: "Emp ID (e.g. 1055) or full name if Emp ID is missing" },
-          employee_name: { type: SchemaType.STRING, description: "Employee name from card header" },
-          month: { type: SchemaType.STRING, description: "Month name (e.g. July)" },
-          year: { type: SchemaType.STRING, description: "Year (e.g. 2026)" },
-          has_page1: { type: SchemaType.BOOLEAN, description: "True if Days 1-16 (Page 1) scan is present" },
-          has_page2: { type: SchemaType.BOOLEAN, description: "True if Days 17-31 (Page 2) scan is present" },
+          employee_id: { type: Type.STRING, description: "Emp ID (e.g. 1055) or full name if Emp ID is missing" },
+          employee_name: { type: Type.STRING, description: "Employee name from card header" },
+          month: { type: Type.STRING, description: "Month name (e.g. July)" },
+          year: { type: Type.STRING, description: "Year (e.g. 2026)" },
+          has_page1: { type: Type.BOOLEAN, description: "True if Days 1-16 (Page 1) scan is present" },
+          has_page2: { type: Type.BOOLEAN, description: "True if Days 17-31 (Page 2) scan is present" },
           records: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             description: "Daily attendance rows",
             items: {
-              type: SchemaType.OBJECT,
+              type: Type.OBJECT,
               properties: {
-                date: { type: SchemaType.INTEGER, description: "Day of month (1 to 31)" },
-                shift: { type: SchemaType.STRING, description: "Shift code (e.g., A, B, C, A+B, B+C, W/O, OFF)" },
-                time_in: { type: SchemaType.STRING, description: "Time In in HH:MM 24h format or empty string" },
-                time_out: { type: SchemaType.STRING, description: "Time Out in HH:MM 24h format or empty string" },
-                ot_hours: { type: SchemaType.STRING, description: "OT Hours if recorded or empty string" }
+                date: { type: Type.INTEGER, description: "Day of month (1 to 31)" },
+                shift: { type: Type.STRING, description: "Shift code (e.g., A, B, C, A+B, B+C, W/O, OFF)" },
+                time_in: { type: Type.STRING, description: "Time In in HH:MM 24h format or empty string" },
+                time_out: { type: Type.STRING, description: "Time Out in HH:MM 24h format or empty string" },
+                ot_hours: { type: Type.STRING, description: "OT Hours if recorded or empty string" }
               },
               required: ["date", "time_in", "time_out"]
             }
@@ -186,7 +189,8 @@ app.post('/api/extract', upload.array('files', 10), async (req, res) => {
     const pageCount = parseInt(req.body.pageCount || '0', 10) || 0;
     const expectedMinCards = pageCount > 0 ? Math.ceil(pageCount / 2) : 1;
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    // @google/genai takes an options object; the old SDK took the key positionally.
+    const genAI = new GoogleGenAI({ apiKey });
 
     const modelsToTry = [
       PRIMARY_VISION_MODEL,
@@ -227,7 +231,9 @@ TIME & SHIFT NORMALIZATION RULES:
 
 Return ONLY a single valid JSON object matching the schema, with a "cards" array containing every distinct employee.`;
 
-    contentsParts.push(systemPrompt);
+    // An explicit text part. The old SDK accepted a bare string in the array;
+    // being explicit costs nothing and removes the ambiguity.
+    contentsParts.push({ text: systemPrompt });
 
     let bestResult = null;
     let lastError = null;
@@ -238,29 +244,33 @@ Return ONLY a single valid JSON object matching the schema, with a "cards" array
         let rawCards = null;
 
         try {
-          const model = genAI.getGenerativeModel({
+          // One call: the model moves into the request and the generation
+          // options move under `config`. Note response.text is a GETTER, not a
+          // method —
+          // calling it would throw "text is not a function".
+          const result = await genAI.models.generateContent({
             model: modelName,
-            generationConfig: {
+            contents: contentsParts,
+            config: {
               responseMimeType: 'application/json',
               responseSchema: attendanceSchema,
               temperature: 0.0
             }
           });
-          const result = await model.generateContent(contentsParts);
-          const responseText = result.response.text();
+          const responseText = result.text;
           const parsed = parseCleanJsonObject(responseText);
           rawCards = parsed.cards || [];
         } catch (schemaErr) {
           console.warn(`Schema mode fallback for ${modelName}:`, schemaErr.message);
-          const model = genAI.getGenerativeModel({
+          const result = await genAI.models.generateContent({
             model: modelName,
-            generationConfig: {
+            contents: contentsParts,
+            config: {
               responseMimeType: 'application/json',
               temperature: 0.0
             }
           });
-          const result = await model.generateContent(contentsParts);
-          const responseText = result.response.text();
+          const responseText = result.text;
           const parsed = parseCleanJsonObject(responseText);
           rawCards = parsed.cards || [];
         }
