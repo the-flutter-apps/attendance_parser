@@ -18,10 +18,12 @@ const PRIMARY_VISION_MODEL = 'gemini-3.5-flash';
 const ESCALATION_VISION_MODELS = [
   'gemini-3.6-flash',
   'gemini-2.5-pro',
-  // gemini-3.1-pro is GA (Feb 2026). The previous pin was its -preview build,
-  // which is the sort of identifier that stops resolving without notice — the
-  // whole point of pinning here is a deterministic list, and a preview is not.
-  'gemini-3.1-pro'
+  // Kept as -preview because that is what this API key can actually reach.
+  // A plain 'gemini-3.1-pro' was tried and returns 404 "not found for API
+  // version v1beta"; /api/models lists gemini-3.1-pro-preview and
+  // gemini-3.1-pro-preview-customtools, with no GA build. Verified against the
+  // live key rather than assumed — the preview suffix is not a leftover.
+  'gemini-3.1-pro-preview'
 ];
 
 const upload = multer({
