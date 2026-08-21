@@ -32,6 +32,37 @@ const upload = multer({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Which models this API key can actually reach.
+//
+// The pinned list is deliberately deterministic, but a pin can go stale without
+// warning: gemini-2.0-flash was retired in June 2026 and every extraction failed
+// until someone noticed. A 404 on a model reads identically to a broken
+// migration, so being able to ask the API directly turns a guess into a fact.
+app.get('/api/models', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(400).json({ error: 'No API key configured.' });
+  try {
+    const genAI = new GoogleGenAI({ apiKey });
+    const out = [];
+    const pager = await genAI.models.list();
+    for await (const m of pager) {
+      const name = (m.name || '').replace(/^models\//, '');
+      const actions = m.supportedActions || m.supportedGenerationMethods || [];
+      if (!actions.length || actions.includes('generateContent')) out.push(name);
+    }
+    const pinned = [PRIMARY_VISION_MODEL, ...ESCALATION_VISION_MODELS];
+    res.json({
+      pinned,
+      // The bit that matters: which of OUR pins are actually reachable.
+      pinnedAvailable: pinned.filter(p => out.includes(p)),
+      pinnedMissing: pinned.filter(p => !out.includes(p)),
+      available: out.sort()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/config', (req, res) => {
   const hasEnvKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here');
   res.json({
