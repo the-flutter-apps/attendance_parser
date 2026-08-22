@@ -15,14 +15,16 @@ const PORT = process.env.PORT || 3000;
 
 // Pinned Vision Model Hierarchy
 //
-// gemini-3.7-flash is the newest flash build this key can reach. 3.5-flash stays
-// as the FIRST fallback rather than being dropped: it is the only model in this
-// list empirically proven to read these cards (a real Harika card extracted on
-// it against the live key), so if the newer model reads them less well the chain
-// lands straight back on the known-good one rather than on a pro model.
+// gemini-3.5-flash stays primary because it is the only build measured to read
+// these cards. gemini-3.7-flash was tried as primary and is NOT in this list at
+// all — on a real July 2026 card it returned the header with an empty records
+// array and misread the year as 2016, where 3.5-flash returned all 15 day rows
+// with times matching the card. It is excluded rather than demoted: the chain
+// keeps whichever model yields the MOST cards, and one hollow card (header, no
+// attendance) would outrank a genuine zero, turning a visible failure into a
+// silent empty import. Newer is not better for handwriting.
 const PRIMARY_VISION_MODEL = 'gemini-3.5-flash';
 const ESCALATION_VISION_MODELS = [
-  'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-2.5-pro',
   // Kept as -preview because that is what this API key can actually reach.
