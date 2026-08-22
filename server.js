@@ -20,9 +20,9 @@ const PORT = process.env.PORT || 3000;
 // list empirically proven to read these cards (a real Harika card extracted on
 // it against the live key), so if the newer model reads them less well the chain
 // lands straight back on the known-good one rather than on a pro model.
-const PRIMARY_VISION_MODEL = 'gemini-3.7-flash';
+const PRIMARY_VISION_MODEL = 'gemini-3.5-flash';
 const ESCALATION_VISION_MODELS = [
-  'gemini-3.5-flash',
+  'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-2.5-pro',
   // Kept as -preview because that is what this API key can actually reach.
